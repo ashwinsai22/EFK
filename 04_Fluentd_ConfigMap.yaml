@@ -131,19 +131,25 @@ data:
       </parse>
     </source>
 
-    # Read ALL pod file-based logs directly from /var/log/pods
+    ### CHANGED: backend-only pod logs
     <source>
-      @id fluentd-pods-files
+      @id krmarket-backend-pods
       @type tail
-      path /var/log/pods/**/**/*.log
-      pos_file /var/log/es-pods-files.log.pos
-      tag pods.file
+      path /var/log/pods/**/krmarket-backend-*/backend/*.log
+      pos_file /var/log/krmarket-backend.pos
+      tag krmarket.backend
       read_from_head true
+
       <parse>
-        @type regexp
-        expression /^(?<message>.*)$/
-        time_key time
-        keep_time_key false
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_format %Y-%m-%dT%H:%M:%S.%LZ
+        </pattern>
+        <pattern>
+          format none
+        </pattern>
       </parse>
     </source>
 
@@ -494,43 +500,41 @@ data:
     </source>
 
   output.conf: |-
-    <match pods.file>
-      @id elasticsearch_pods_file
+    ### CHANGED: send ONLY backend logs
+    <match krmarket.backend>
+      @id elasticsearch_backend
       @type elasticsearch
       @log_level info
-      type_name _doc
-      include_tag_key true
       host elasticsearch-logging
       port 9200
       logstash_format true
+      include_tag_key true
+      tag_key tag
+      type_name _doc
+
       <buffer>
         @type file
-        path /var/log/fluentd-buffers/pods.file.buffer
+        path /var/log/fluentd-buffers/krmarket-backend
         flush_interval 5s
-        retry_forever
+        retry_forever true
       </buffer>
     </match>
 
+    ### UNCHANGED: system / cluster logs
     <match **>
       @id elasticsearch
       @type elasticsearch
       @log_level info
-      type_name _doc
-      include_tag_key true
       host elasticsearch-logging
       port 9200
       logstash_format true
+      include_tag_key true
+
       <buffer>
         @type file
         path /var/log/fluentd-buffers/kubernetes.system.buffer
-        flush_mode interval
-        retry_type exponential_backoff
         flush_thread_count 2
         flush_interval 5s
         retry_forever
-        retry_max_interval 30
-        chunk_limit_size 2M
-        queue_limit_length 8
-        overflow_action block
       </buffer>
     </match>
